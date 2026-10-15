@@ -1,7 +1,7 @@
 const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
 const box={};vm.createContext(box);vm.runInContext(fs.readFileSync(__dirname+'/pixel-collect.html','utf8').match(/<script id="model">([\s\S]*?)<\/script>/)[1],box);const M=box.PixelModel;
 const dot=(x,y,color=0)=>({x:142+x*18,y:47+y*18,color,state:0});
-function fixture(dots){const s=M.create(0);s.dots=dots;s.jobs=M.colors.map(()=>[1]);return s;}
+function fixture(dots){const s=M.create(0);s.queueEnabled=false;s.dots=dots;s.jobs=M.colors.map(()=>[1]);return s;}
 function until(s,predicate){for(let i=0;i<10000&&!predicate();i++)M.step(s,.05);assert(predicate(),'bounded simulation reached expected state');}
 {
  const s=fixture(M.colors.map((_,i)=>dot(i*2,0,i)));

@@ -23,7 +23,7 @@ for(let i=0;i<5;i++){
  }
  let trap=null;
  for(let a=0;a<4&&!trap;a++)for(let b=a+1;b<5&&!trap;b++)for(let c=b+1;c<6&&!trap;c++){
-  const s=M.create(i);if(![a,b,c].every(color=>M.deploy(s,color)))continue;settle(s);
+  const s=M.create(i);s.queueEnabled=false;if(![a,b,c].every(color=>M.deploy(s,color)))continue;settle(s);
   if(s.robots.filter(r=>r.active).length===3&&s.robots.filter(r=>r.active).every(r=>r.delivered>0)){trap={colors:[a,b,c],delivered:s.robots.filter(r=>r.active).map(r=>r.delivered),quotas:s.robots.filter(r=>r.active).map(r=>r.quota)};assert(M.blocked(s));const before=s.delivered;for(let n=0;n<500;n++)M.step(s,.05);assert.equal(s.delivered,before,'stalled indefinitely, not just travelling home');assert(!M.deploy(s,[0,1,2,3,4,5].find(x=>![a,b,c].includes(x))));assert(M.undo(s));assert.equal(s.robots.filter(r=>r.active).length,2);}
  }
  assert(trap,`level ${i+1} has a progressed full-slot trap`);assert.deepEqual(trap.colors,fixture.trap.colors);assert.deepEqual(Array.from(trap.delivered),fixture.trap.counts);

@@ -15,3 +15,7 @@ require('./movement-test.cjs');
 require('./puzzle-test.cjs');
 require('./nontrivial-test.cjs');
 require('./neutral-ui-test.cjs');
+require('./queue-test.cjs');
+require('./queue-choice-test.cjs');
+require('./robot-art-test.cjs');
+require('./board-view-test.cjs');

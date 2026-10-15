@@ -56,8 +56,8 @@ const {installPuzzleClock,selectJobs}=require('./browser-puzzle-helpers.cjs');
     assert.equal(await page.locator('#title').textContent(), '5. Home sweet home');
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     // Simulate shipping a reordered catalog with an inserted mission, not a new save.
-    servedHTML = html.replace('return {colors,levels,makeDots,pictureDots,create,step,deploy,undo,exposed,blocked,settled,solution};',
-      "levels.reverse();levels.unshift({id:'new-mission',name:'New mission',note:'Added later',kind:'heart'});return {colors,levels,makeDots,pictureDots,create,step,deploy,undo,exposed,blocked,settled,solution};");
+    servedHTML = html.replace('return {colors,levels,',
+      "levels.reverse();levels.unshift({id:'new-mission',name:'New mission',note:'Added later',kind:'heart'});return {colors,levels,");
     await page.reload();
     assert.equal(await page.locator('[data-level]').count(), 6);
     assert.equal(await page.locator('.finished').count(), 5);

@@ -1,0 +1,11 @@
+const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
+const html=fs.readFileSync(__dirname+'/pixel-collect.html','utf8'),box={};vm.createContext(box);vm.runInContext(html.match(/<script id="model">([\s\S]*?)<\/script>/)[1],box);const M=box.PixelModel;
+assert(M.view,'expanded view preserves logical picture geometry while fitting full-size robots');
+assert.equal(M.view.spacing,32);assert.equal(M.view.bodyRadius,24);
+assert(M.view.spacing>=M.view.bodyRadius+6.5,'full body and parcel clear intact neighboring pixels');
+const robotSource=html.match(/function robotArt\(r\)\{([\s\S]*?)function draw/)[1];
+assert.match(robotSource,/round\(-13,-12,26,25,7,c\)/,'original 26px body used while working and parked');
+assert(!/if\(r.active\).*workingRobot/.test(robotSource),'active jobs do not shrink');
+assert.match(html,/function robotPortrait/,'selection uses matching robot portrait art');
+assert.match(html,/class="robot-portrait"/);assert.match(html,/queueCount/);
+console.log('Original working robot body, expanded corridor clearance, portrait UI hooks passed.');

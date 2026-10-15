@@ -10,12 +10,16 @@ const authored=require('./authored-levels.json');
  });
  await page.goto('http://127.0.0.1:8769/pixel-collect.html');
  assert.equal(await page.locator('.slot.empty').count(),3);assert.equal(await page.locator('#play').textContent(),'Start collecting');assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+ assert.equal(await page.locator('#fleet button:visible').count(),4);assert.equal(await page.locator('#fleet button:visible svg.robot-portrait').count(),4);
+ assert(!/Rose|Gold|Mint|Blue|Lilac|Peach/.test(await page.locator('#fleet').innerText()),'portraits and quotas replace visible color-name cards');
+ assert.match(await page.locator('#queueCount').innerText(),/4 waiting · 3 queued/);
  assert(!/bright|dim|exposed|try.*color/i.test(await page.locator('.instructions').textContent()));
  assert(await page.evaluate(()=>pictureAlphas.length>300&&pictureAlphas.every(a=>a===1)),'all remaining pixels have normal opacity');
  // Button identity and focus survive both idle and collecting frames.
  await page.evaluate(()=>{window.colorButton=document.querySelector('#fleet [data-color="4"]');colorButton.focus();});await page.waitForTimeout(100);
  assert(await page.evaluate(()=>colorButton===document.querySelector('#fleet [data-color="4"]')&&document.activeElement===colorButton));
  await page.click('#fleet [data-color="0"]');assert.equal(await page.locator('.slot.empty').count(),2);assert(await page.locator('#fleet [data-color="0"]').isDisabled());
+ assert.equal(await page.locator('#fleet button:visible').count(),3,'selection alone cannot replenish');
  await page.click('#play');await page.waitForTimeout(500);await page.click('#play');const paused=await page.locator('#count').textContent();await page.waitForTimeout(250);assert.equal(await page.locator('#count').textContent(),paused);
  assert(await page.evaluate(()=>colorButton===document.querySelector('#fleet [data-color="4"]')));
  await page.click('#undo');assert.equal(await page.locator('.slot.empty').count(),3);assert.equal(await page.locator('#play').textContent(),'Resume');assert((await page.locator('#count').textContent()).startsWith('0%'));
@@ -23,6 +27,9 @@ const authored=require('./authored-levels.json');
  await page.click('#speed');assert.equal(await page.locator('#speed').textContent(),'Speed: 2×');
  await page.click('#fleet [data-color="0"]');await page.click('#fleet [data-color="4"]');await page.screenshot({path:__dirname+'/preview-puzzle.png',fullPage:true});
  await installPuzzleClock(page);
+ // Preserve unrestricted authored-trap coverage as an explicit mechanics fixture;
+ // production availability is separately exercised below with the queue on.
+ await page.evaluate(()=>{const create=PixelModel.create;PixelModel.create=i=>{const s=create(i);if(window.unrestrictedFixture)s.queueEnabled=false;return s;};window.unrestrictedFixture=true;});
  // Real authored pictures, not a synthetic deadlock: all three jobs progress then lock.
  for(let i=0;i<5;i++){
   await page.click(`[data-level="${i}"]`);
@@ -37,6 +44,20 @@ const authored=require('./authored-levels.json');
   assert(!/exposed|bright|dim|Rose|Gold|Mint|Blue|Lilac|Peach/.test(await page.locator('#message').textContent()));
   await page.click('#undo');assert.equal(await page.locator('#play').textContent(),'Resume');assert.equal(await page.locator('.slot.empty').count(),1);
   await page.click('#restart');assert.equal(await page.locator('.slot.empty').count(),3);
+ }
+ await page.evaluate(()=>{window.unrestrictedFixture=false;});
+ const queuedTraps=[[4,2,5],[4,2,5],[4,1,5],[2,1,4],[2,4,5]];
+ for(let i=0;i<5;i++){
+  await page.click(`[data-level="${i}"]`);assert.equal(await page.locator('#fleet button:enabled').count(),4);
+  const hidden=await page.evaluate(()=>{const s=__puzzleState;return s.queue[4].color;});
+  assert(await page.locator(`#fleet [data-color="${hidden}"]`).isHidden());
+  for(const c of queuedTraps[i])await page.click(`#fleet [data-color="${c}"]`);
+  assert.equal(await page.locator('#fleet button:visible').count(),1,'three selections do not draw replacements');
+  await page.click('#play');await waitForSettled(page);
+  assert(await page.evaluate(()=>__puzzleState.queueEnabled&&__puzzleState.released===4&&__puzzleState.robots.filter(r=>r.active).length===3&&__puzzleState.robots.filter(r=>r.active).every(r=>r.delivered>0)));
+  assert.match(await page.locator('#message').innerText(),/Blocked:.*Undo/);
+  assert(await page.locator(`#fleet [data-color="${hidden}"]`).isHidden(),'partial deliveries cannot reveal queued jobs');
+  await page.click('#undo');assert.equal(await page.locator('#fleet button:visible').count(),2);assert.equal(await page.locator('#play').innerText(),'Resume');
  }
  for(let i=0;i<5;i++){
   await page.click(`[data-level="${i}"]`);await page.click('#play');await selectJobs(page,i);

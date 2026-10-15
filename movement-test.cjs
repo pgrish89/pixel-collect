@@ -1,11 +1,15 @@
 const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
 const box={};vm.createContext(box);vm.runInContext(fs.readFileSync(__dirname+'/pixel-collect.html','utf8').match(/<script id="model">([\s\S]*?)<\/script>/)[1],box);const M=box.PixelModel;
-assert.match(fs.readFileSync(__dirname+'/pixel-collect.html','utf8'),/function workingRobot\(r\)/,'compact working art must fit the tested footprint');
+assert.match(fs.readFileSync(__dirname+'/pixel-collect.html','utf8'),/function robotArt\(r\)/,'full-size working art uses expanded view footprint');
 const dot=(x,y,color=0)=>({x:142+x*18,y:47+y*18,color,state:0});
-function fixture(dots){const s=M.create(0);s.dots=dots;s.jobs=M.colors.map(()=>[1]);return s;}
-// Independent swept circle versus intact pixel: samples include the full segment,
-// not only frame endpoints. The 8px working footprint must clear 6.5px pixels.
-function advance(s,dt=.05){const old=s.robots.map(r=>({x:r.x,y:r.y})),solid=s.dots.filter(d=>d.state<2);M.step(s,dt);for(const [i,r] of s.robots.entries())for(const d of solid){const a=old[i],dx=r.x-a.x,dy=r.y-a.y,t=Math.max(0,Math.min(1,((d.x-a.x)*dx+(d.y-a.y)*dy)/(dx*dx+dy*dy||1)));assert(Math.hypot(a.x+t*dx-d.x,a.y+t*dy-d.y)>=14.5-1e-6,`robot ${i} swept its body through an intact pixel (${d.x},${d.y})`);}}
+function fixture(dots){const s=M.create(0);s.queueEnabled=false;s.dots=dots;s.jobs=M.colors.map(()=>[1]);return s;}
+// Audit the actual rectilinear swept route, including waypoints consumed inside
+// a tick, not a diagonal chord between the tick's two rendered endpoints.
+// The entire original body, antenna and parcel fit this 24px view-space circle.
+function advance(s,dt=.05){const old=s.robots.map(r=>({x:r.x,y:r.y,route:r.route.slice()})),solid=s.dots.filter(d=>d.state<2).map(M.view.project);M.step(s,dt);for(const [i,r] of s.robots.entries()){
+ const consumed=Math.max(0,old[i].route.length-r.route.length),points=[old[i],...old[i].route.slice(0,consumed),r].map(M.view.project);
+ for(let n=1;n<points.length;n++)for(const d of solid){const a=points[n-1],b=points[n],dx=b.x-a.x,dy=b.y-a.y,t=Math.max(0,Math.min(1,((d.x-a.x)*dx+(d.y-a.y)*dy)/(dx*dx+dy*dy||1)));assert(Math.hypot(a.x+t*dx-d.x,a.y+t*dy-d.y)>=M.view.bodyRadius+6.5-1e-6,`robot ${i} swept its original body through an intact view pixel (${d.x},${d.y})`);}
+}}
 function until(s,p){for(let n=0;n<40000&&!p();n++)advance(s);assert(p(),'movement settled within bounded frames');}
 {
  const dots=[];for(let y=0;y<12;y++)for(let x=0;x<12;x++)dots.push(dot(x,y,1));dots.find(d=>d.x===142+5*18&&d.y===47).color=0;
@@ -41,7 +45,7 @@ for(let i=0;i<5;i++){
  for(const job of plan.slice(concurrent?2:0)){assert(M.deploy(s,job.color));until(s,()=>M.settled(s));}
  assert(s.done);assert(s.dots.every(d=>d.state===2));console.log('Swept footprint and full delivery: authored level '+(i+1)+(concurrent?' concurrent helpers':''));
  }
- const s=M.create(i),trap=require('./authored-levels.json')[M.levels[i].kind].trap;for(const c of trap.colors)M.deploy(s,c);until(s,()=>M.settled(s));assert.deepEqual(Array.from(s.robots.filter(r=>r.active),r=>r.delivered),trap.counts);
+ const s=M.create(i);s.queueEnabled=false;const trap=require('./authored-levels.json')[M.levels[i].kind].trap;for(const c of trap.colors)M.deploy(s,c);until(s,()=>M.settled(s));assert.deepEqual(Array.from(s.robots.filter(r=>r.active),r=>r.delivered),trap.counts);
 }
 {
  const a=fixture([dot(4,4)]),b=fixture([dot(4,4)]);M.deploy(a,0);M.deploy(b,0);
