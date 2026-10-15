@@ -17,6 +17,7 @@ Completed-level checkmarks and the selected level are stored locally under `pixe
 - `prepare-site.py`: regenerate hosted HTML and icons from the standalone preview (requires Pillow).
 - `test.cjs`: run `node test.cjs` to simulate completion of all five levels and validate script syntax.
 - `browser-test.cjs`: Playwright checks for the original preview, using a local server on port 8769.
+- `live-test.cjs`: Playwright checks against the actual HTTPS Pages site, verifying touch interaction, completion saves, selected-level restoration, manifest/icons, and service-worker offline play. Install Playwright locally (`npm install --no-save playwright` and `npx playwright install chromium`) and run `node live-test.cjs`; browser system dependencies must also be available.
 
 GitHub Pages publishes only `docs/` on `main`. To update, edit the standalone HTML, run `python3 prepare-site.py`, test, and push reviewed changes. Keep the storage key stable to retain completion saves. Bump the service-worker cache version when changing the offline shell file list.
 
