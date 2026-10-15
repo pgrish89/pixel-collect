@@ -29,6 +29,7 @@ jobs:
         run: |
           node live-source/test.cjs
           node live-source/save-test.cjs
+          python3 live-source/deployment-test.py
       - name: Test preview model and save compatibility
         run: |
           node preview-source/test.cjs

@@ -42,6 +42,8 @@ Progress is not synced across devices/browser contexts; downloaded HTML has a se
 - `save-test.cjs`: save migration, stable-ID and isolation regression tests.
 - `deployment-test.py`: site assembly and provenance tests.
 - `browser-test.cjs`, `live-test.cjs`: browser gameplay and production/offline regression checks.
+- `save-browser-test.cjs`: local-only browser tests for legacy migration, level reorder/insertion, bad saves, and unavailable storage.
+- `preview-live-test.cjs`: hosted legacy migration, preview save/cache isolation, provenance, and offline checks for both URLs.
 - `scripts/assemble-pages.py`: combine the approved and selected branch's `docs/` into a single Pages artifact.
 - `scripts/select-preview.py`: choose the development branch without changing production.
 
