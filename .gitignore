@@ -3,3 +3,5 @@ browser-libs/
 preview*.png
 package*.json
 *.log
+__pycache__/
+*.pyc

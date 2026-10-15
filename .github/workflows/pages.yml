@@ -1,0 +1,55 @@
+name: Publish live and development preview
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: pixel-collect-pages
+  cancel-in-progress: false
+jobs:
+  build:
+    if: github.event_name == 'workflow_dispatch' || github.ref_name == 'main' || github.ref_name == vars.PREVIEW_BRANCH
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out approved production
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: live-source
+          persist-credentials: false
+      - name: Check out selected preview branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ vars.PREVIEW_BRANCH || 'develop' }}
+          path: preview-source
+          persist-credentials: false
+      - name: Test production model and save compatibility
+        run: |
+          node live-source/test.cjs
+          node live-source/save-test.cjs
+      - name: Test preview model and save compatibility
+        run: |
+          node preview-source/test.cjs
+          node preview-source/save-test.cjs
+      - name: Assemble isolated live and preview sites
+        env:
+          PREVIEW_BRANCH: ${{ vars.PREVIEW_BRANCH || 'develop' }}
+        run: python3 live-source/scripts/assemble-pages.py live-source preview-source site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy both versions together
+        id: deployment
+        uses: actions/deploy-pages@v4
