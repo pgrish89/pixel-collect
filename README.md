@@ -29,7 +29,9 @@ Open the live URL in Safari, choose Share → Add to Home Screen, and enable Ope
 
 Each mission starts paused with three empty active slots. Choose a color to deploy its next fixed-quota job, then press **Start collecting**. Each color button shows its next target and remaining jobs; active or exhausted colors cannot be selected. Up to three jobs may run together. A slot unlocks only when its full target has been **delivered home**, not on pickup; robots cannot be freely parked or swapped.
 
-Robots collect only matching pixels adjacent through four-way empty space to the outside of the picture. Bright pixels are exposed; dim pixels are inside. Sealed holes do not count as outside, and reserving a pixel does not open a passage—picking it up does. Choose colors outside-in to avoid filling all three slots with blocked jobs. Blocked guidance offers **Undo** or **Restart**; there is no automatic deployment or timeout.
+Robots collect only matching pixels adjacent through four-way empty space to the outside of the picture. Sealed holes do not count as outside, and reserving a pixel does not open a passage—picking it up does. Every remaining pixel is drawn at normal opacity: there are no exposure highlights, dimmed inner pixels, suggested colors, or accessibility-based button restrictions. A blocked message appears only after collection has run; it offers **Undo** or **Restart**, without naming a color. There is no automatic deployment or timeout.
+
+All five original silhouettes now use six-color mosaics and fixed authored targets, rather than solo-solvable 24-pixel peeling batches. Each opening helper pair has two independently useful choices: either robot delivers some pixels but cannot meet its target without the other. Both opening orders win, as does deploying the pair together. Every picture also has a tested three-slot combination in which **all three robots deliver pixels and then stall below quota**. Quotas range from 1 to 118; each color's job targets sum exactly to its true pixel count. See [PUZZLE-DESIGN.md](PUZZLE-DESIGN.md) for reproducible schedules, traps, authoring details, and pacing tradeoffs. Stable IDs, silhouettes, pixel totals, and save keys are unchanged.
 
 **Undo** restores the entire state immediately before the last successful selection, including earlier robots, reservations, carried pixels, deliveries, and job counts, then pauses with **Resume**. **Restart** resets the current puzzle to empty slots without clearing completed-level checkmarks. Speed cycles through 1×, 2×, and 4×. All five missions have verified winning selection sequences. This puzzle feature batch is a candidate for a minor 0.x release; save schema and keys remain unchanged.
 
@@ -48,6 +50,10 @@ Progress is not synced across devices/browser contexts; downloaded HTML has a se
 - `prepare-site.py`: regenerate hosted HTML/icons (requires Pillow); does not change the save key on every release.
 - `test.cjs`: simulate completion of all five levels and validate script syntax.
 - `puzzle-test.cjs`: slot limits, exact concurrent quotas, outside/cavity exposure, blocked states, and full-snapshot Undo regressions.
+- `nontrivial-test.cjs`: preserved silhouettes, authored layout fixtures, both helper opening orders and concurrent starts, exact quotas, complete deliveries, and progressed three-slot traps for every picture.
+- `neutral-ui-test.cjs`: neutral copy and rendering independent of exposure.
+- `authored-levels.json`, `design-levels.cjs`: offline authoring fixtures and deterministic reproduction tool; not loaded by the game.
+- `browser-puzzle-helpers.cjs`: test-only bounded clock and explicit-click schedule interpreter; waits for model quiescence, not individual slot disappearance.
 - `save-test.cjs`: save migration, stable-ID and isolation regression tests.
 - `deployment-test.py`: site assembly and provenance tests.
 - `browser-test.cjs`, `live-test.cjs`: browser gameplay and production/offline regression checks.
@@ -56,6 +62,6 @@ Progress is not synced across devices/browser contexts; downloaded HTML has a se
 - `scripts/assemble-pages.py`: combine the approved and selected branch's `docs/` into a single Pages artifact.
 - `scripts/select-preview.py`: choose the development branch without changing production.
 
-Run `node test.cjs`, `node save-test.cjs`, and `python3 deployment-test.py`. For browser checks, install Playwright locally (`npm install --no-save playwright` and `npx playwright install chromium`); its system dependencies must also be available. `browser-test.cjs` uses a local HTTP server on port 8769. `live-test.cjs` targets the actual published production URL.
+Run `node test.cjs`, `node puzzle-test.cjs`, `node nontrivial-test.cjs`, `node neutral-ui-test.cjs`, `node save-test.cjs`, and `python3 deployment-test.py`. For browser checks, install Playwright locally (`npm install --no-save playwright` and `npx playwright install chromium`); its system dependencies must also be available. Serve this directory with `python3 -m http.server 8769 --bind 127.0.0.1`, then run `node browser-test.cjs` and `node save-browser-test.cjs`. On this WSL install, prefix browser commands with `LD_LIBRARY_PATH=/home/pgrish/pixel-collect/browser-libs/extracted/usr/lib/x86_64-linux-gnu`. `preview-live-test.cjs` must run after publishing; `live-test.cjs` intentionally remains the legacy production smoke test, targeting the still-approved main game.
 
 Keep local browser dependencies, downloaded packages, screenshots, credentials, and personal information out of Git. Actual iPhone installation/storage behavior requires a real device check; Chromium phone emulation is not iOS verification.

@@ -3,13 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 // Serve the real standalone source at both paths without touching any deployed site.
 const html = fs.readFileSync(__dirname + '/pixel-collect.html', 'utf8');
-async function selectJobs(page, i) {
-  const plan = await page.evaluate(i => PixelModel.solution(i), i);
-  for (const job of plan) {
-    await page.click(`#fleet [data-color="${job.color}"]`);
-    await page.waitForFunction(c => !document.querySelector(`#slots [data-color="${c}"]`), job.color);
-  }
-}
+const {installPuzzleClock,selectJobs}=require('./browser-puzzle-helpers.cjs');
 (async () => {
   let servedHTML = html;
   const browser = await chromium.launch({headless: true});
@@ -28,10 +22,7 @@ async function selectJobs(page, i) {
     assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('pixel-collect-v2'))),
       {version: 2, completed: ['first-heart', 'tiny-rocket'], level: 'garden-butterfly'});
     // Every authored level must actually deliver its pixels and persist its stable ID.
-    await page.evaluate(() => {
-      const original = PixelModel.step;
-      PixelModel.step = s => {for (let j = 0; j < 600 && !s.done; j++) original(s, .05);};
-    });
+    await installPuzzleClock(page);
     for (let i = 0; i < 5; i++) {
       await page.click(`[data-level="${i}"]`);
       await page.click('#play');
@@ -48,10 +39,7 @@ async function selectJobs(page, i) {
     assert.equal(await page.locator('.finished').count(), 0);
     assert.equal(await page.locator('#title').textContent(), '1. A little love');
     await page.click('[data-level="1"]');
-    await page.evaluate(() => {
-      const original = PixelModel.step;
-      PixelModel.step = s => {for (let j = 0; j < 600 && !s.done; j++) original(s, .05);};
-    });
+    await installPuzzleClock(page);
     await page.click('#play');
     await selectJobs(page, 1);
     await page.waitForFunction(() => document.querySelector('#win').open);
@@ -68,8 +56,8 @@ async function selectJobs(page, i) {
     assert.equal(await page.locator('#title').textContent(), '5. Home sweet home');
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     // Simulate shipping a reordered catalog with an inserted mission, not a new save.
-    servedHTML = html.replace('return {colors,levels,makeDots,create,step,deploy,undo,exposed,blocked,solution};',
-      "levels.reverse();levels.unshift({id:'new-mission',name:'New mission',note:'Added later',kind:'heart'});return {colors,levels,makeDots,create,step,deploy,undo,exposed,blocked,solution};");
+    servedHTML = html.replace('return {colors,levels,makeDots,pictureDots,create,step,deploy,undo,exposed,blocked,settled,solution};',
+      "levels.reverse();levels.unshift({id:'new-mission',name:'New mission',note:'Added later',kind:'heart'});return {colors,levels,makeDots,pictureDots,create,step,deploy,undo,exposed,blocked,settled,solution};");
     await page.reload();
     assert.equal(await page.locator('[data-level]').count(), 6);
     assert.equal(await page.locator('.finished').count(), 5);

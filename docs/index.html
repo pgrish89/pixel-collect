@@ -6,7 +6,7 @@
 </style></head><body><main>
 <header><div><div class="tag">ROBOT WORKSHOP / PREVIEW 01</div><h1>pixel collect<span style="color:#8ee7db">.</span></h1></div><small>5 little missions</small></header>
 <nav class="levels" aria-label="Choose level" id="levels"></nav>
-<section class="panel"><div class="topline"><div><h2 id="title"></h2><small id="subtitle"></small></div><span id="count" aria-live="off"></span></div><canvas id="board" width="720" height="660" aria-label="Robots collecting colored picture pixels"></canvas><div class="progress" role="progressbar" aria-label="Picture collected" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="bar"></div></div><p class="instructions">Choose up to <b>three color jobs</b>, then Start collecting. Robots collect only pixels touching outside-connected empty space (bright), not sealed inner cavities (dim). Each slot stays locked until its target is delivered home. Plan your colors; Undo or Restart if blocked.</p></section>
+<section class="panel"><div class="topline"><div><h2 id="title"></h2><small id="subtitle"></small></div><span id="count" aria-live="off"></span></div><canvas id="board" width="720" height="660" aria-label="Robots collecting colored picture pixels"></canvas><div class="progress" role="progressbar" aria-label="Picture collected" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="bar"></div></div><p class="instructions">Choose up to <b>three color jobs</b>, then Start collecting. Robots collect from the outside through four-way empty space; sealed holes do not count. Jobs stay in their slots until their full targets are delivered home. Undo or Restart to change your selections.</p></section>
 <section id="slots" class="slots" aria-label="Three active robot slots"></section>
 <div class="fleet" id="fleet" aria-label="Choose a robot job"></div>
 <div class="controls"><button class="primary" id="play">Start collecting</button><button id="speed" aria-label="Change collection speed">Speed: 1×</button><button id="undo" disabled>Undo</button><button id="restart">Restart</button></div>
@@ -24,7 +24,17 @@ if(k==='butterfly'){if(Math.abs(X)<1&&y>5&&y<22)return 4;if(y<6&&(x===9||x===14)
 if(k==='rocket'){if(y>18&&y<24&&Math.abs(X)<(24-y)/2)return y%2?1:5;if(y>11&&y<21&&Math.abs(X)<7&&Math.abs(X)>3)return 0;if(y>1&&y<20&&Math.abs(X)<Math.min(4,(y-1)*.8)){if(Math.hypot(X,Y+3)<2.7)return 3;return y<6?0:2;}return -1;}
 if(k==='house'){if(y>19)return 2;if(y<12&&y>2&&Math.abs(X)<y-2)return (x+y)%4===0?5:0;if(y>=12&&y<21&&x>3&&x<20){if(x>10&&x<14&&y>15)return 4;if(y<16&&((x>5&&x<9)||(x>15&&x<19)))return 3;return 1;}if(x===18&&y>3&&y<9)return 5;return -1;}
 }
-function makeDots(i){const out=[];for(let y=0;y<24;y++)for(let x=0;x<24;x++){const c=pixel(levels[i].kind,x,y);if(c>=0)out.push({x:142+x*18,y:47+y*18,color:c,state:0});}return out;}
+// Offline-authored pair-closure targets; seeds preserve the original silhouette
+// and its dominant colors while adding competing mosaic accents. No runtime solver.
+const authored={
+ heart:{seed:1701,plan:[[0,118],[4,107],[2,20],[5,79],[1,15],[3,20],[0,3]]},
+ sun:{seed:11702,plan:[[0,4],[4,9],[1,89],[5,71],[0,5],[2,11],[3,4],[4,3]]},
+ butterfly:{seed:21701,plan:[[3,65],[4,97],[0,43],[1,51],[2,12],[5,24],[3,5],[4,3]]},
+ rocket:{seed:31701,plan:[[0,66],[2,60],[1,18],[3,27],[4,11],[5,8],[0,1],[2,1]]},
+ house:{seed:41701,plan:[[1,74],[2,74],[0,60],[3,43],[4,30],[5,31],[1,3],[2,3],[0,1]]}
+};
+function pictureDots(i){const out=[];for(let y=0;y<24;y++)for(let x=0;x<24;x++){const c=pixel(levels[i].kind,x,y);if(c>=0)out.push({x:142+x*18,y:47+y*18,color:c,state:0});}return out;}
+function makeDots(i){let seed=authored[levels[i].kind].seed;const random=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;};return pictureDots(i).map(d=>({...d,color:random()<.32?Math.floor(random()*6):d.color}));}
 // Occupancy changes only at pickup: reservations still seal cavities.
 function exposed(s){
  if(s.exterior&&s.exteriorVersion===s.version)return s.exterior;
@@ -34,18 +44,9 @@ function exposed(s){
  s.exterior=out;s.exteriorVersion=s.version;return out;
 }
 function nearest(s,r){let best=null,dist=Infinity;for(const d of exposed(s))if(d.color===r.color&&d.state===0){const v=(d.x-r.x)**2+(d.y-r.y)**2;if(v<dist){best=d;dist=v;}}return best;}
-const plans=new Map();
-function solution(i){
- const kind=levels[i].kind;if(plans.has(kind))return plans.get(kind).map(j=>({...j}));
- const s={dots:makeDots(i),version:0},plan=[];
- while(s.dots.some(d=>d.state===0)){
-  const counts=colors.map((_,c)=>[...exposed(s)].filter(d=>d.state===0&&d.color===c).length);
-  const color=counts.indexOf(Math.max(...counts)),r={color,x:75+color*114,y:585};let quota=0;
-  while(quota<24){const d=nearest(s,r);if(!d)break;d.state=2;s.version++;quota++;}
-  if(!quota)throw Error('No exterior peeling move');plan.push({color,quota});
- }
- plans.set(kind,plan);return plan.map(j=>({...j}));
-}
+// Test/reference plan only: after each explicit deployment, wait for settled(),
+// not for that robot to leave. A partial job can need a later helper color.
+function solution(i){return authored[levels[i].kind].plan.map(([color,quota])=>({color,quota}));}
 function create(i){const plan=solution(i);return {index:i,dots:makeDots(i),robots:colors.map((c,j)=>({color:j,x:75+j*114,y:585,homeX:75+j*114,homeY:585,target:null,carrying:null,active:false,slot:null,quota:0,delivered:0})),jobs:colors.map((_,c)=>plan.filter(j=>j.color===c).map(j=>j.quota)),used:colors.map(()=>0),history:[],version:0,delivered:0,done:false,time:0};}
 function snapshot(s){return {index:s.index,dots:s.dots.map(d=>({...d})),robots:s.robots.map(r=>({...r,target:r.target?s.dots.indexOf(r.target):null,carrying:r.carrying?s.dots.indexOf(r.carrying):null})),jobs:s.jobs.map(j=>j.slice()),used:s.used.slice(),version:s.version,delivered:s.delivered,done:s.done,time:s.time};}
 function deploy(s,color){
@@ -54,14 +55,15 @@ function deploy(s,color){
  s.history.push(snapshot(s));r.slot=[0,1,2].find(i=>!slots.includes(i));r.active=true;r.quota=s.jobs[color][s.used[color]++];r.delivered=0;return true;
 }
 function undo(s){if(!s.history.length)return false;const history=s.history,prev=history.pop();Object.assign(s,prev);s.history=history;for(const r of s.robots){r.target=r.target===null?null:s.dots[r.target];r.carrying=r.carrying===null?null:s.dots[r.carrying];}delete s.exterior;delete s.exteriorVersion;return true;}
-function blocked(s){return !s.done&&s.robots.some(r=>r.active)&&!s.robots.some(r=>r.active&&(r.target||r.carrying||nearest(s,r)));}
+function settled(s){return s.done||!s.robots.some(r=>r.active&&(r.target||r.carrying||nearest(s,r)));}
+function blocked(s){return !s.done&&s.robots.some(r=>r.active)&&settled(s);}
 function step(s,dt){if(s.done)return;s.time+=dt;for(const r of s.robots){if(!r.active)continue;
  if(!r.target&&!r.carrying){const best=nearest(s,r);if(best){best.state=1;r.target=best;}}
  const dest=r.target||{x:r.homeX,y:r.homeY};const dx=dest.x-r.x,dy=dest.y-r.y,d=Math.hypot(dx,dy),move=dt*420;
  if(d<=move){r.x=dest.x;r.y=dest.y;if(r.target){r.carrying=r.target;r.target=null;r.carrying.state=3;s.version++;}else if(r.carrying){r.carrying.state=2;r.carrying=null;s.delivered++;r.delivered++;if(r.delivered===r.quota){r.active=false;r.slot=null;}}}else{r.x+=dx/d*move;r.y+=dy/d*move;}}
  s.done=s.delivered===s.dots.length;
 }
-return {colors,levels,makeDots,create,step,deploy,undo,exposed,blocked,solution};})();
+return {colors,levels,makeDots,pictureDots,create,step,deploy,undo,exposed,blocked,settled,solution};})();
 </script>
 <script id="saves">
 var PixelSaves=(()=>{
@@ -113,13 +115,13 @@ function jobsHUD(){
  for(let i=0;i<3;i++){let card=$('slots').children[i];if(!card){card=document.createElement('div');$('slots').append(card);}const r=active.find(r=>r.slot===i);card.className='slot'+(r?' active':' empty');if(r){card.dataset.color=r.color;card.textContent=`${names[r.color]} · ${r.delivered}/${r.quota} delivered`;card.style.borderColor=M.colors[r.color];}else{delete card.dataset.color;card.textContent=`Slot ${i+1} · empty`;card.style.borderColor='';}}
  $('undo').disabled=!state.history.length;$('play').disabled=state.done;
  const warning=storage?'':'Saving is unavailable; progress is temporary. ';
- $('message').textContent=warning+(state.done?'All pixels delivered!':M.blocked(state)?`Blocked: your active colors cannot reach an outside-connected pixel. ${full?'All three slots are full. ':''}Undo a selection or restart; try an exposed color first.`:full?'All three slots are locked until their target is delivered. Undo to change a selection.':active.length?'Slots unlock only after every target pixel reaches home. Add an exposed color, or Undo a selection.':'Choose a color job, then Start collecting. Bright pixels touch outside-connected empty space; dim pixels are inside.');
+ $('message').textContent=warning+(state.done?'All pixels delivered!':state.time>0&&M.blocked(state)?`Blocked: the active jobs cannot continue. ${full?'All three slots are full. ':''}Undo a selection or restart.`:full?'Three jobs on duty. Slots unlock after their targets are delivered.':active.length?'Jobs stay on duty until their targets are delivered home.':'Choose up to three color jobs, then Start collecting.');
 }
 function load(i){if($('win').open)$('win').close();state=M.create(i);saved.level=M.levels[i].id;save();playing=false;announced=false;$('play').textContent='Start collecting';$('title').textContent=`${i+1}. ${M.levels[i].name}`;$('subtitle').textContent=M.levels[i].note;menus();draw();hud();}
 function hud(){jobsHUD();const p=Math.round(state.delivered/state.dots.length*100);$('count').textContent=`${p}% · ${state.delivered}/${state.dots.length}`;$('bar').style.width=p+'%';document.querySelector('.progress').setAttribute('aria-valuenow',p);}
 function round(x,y,w,h,r,c){ctx.fillStyle=c;ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fill();}
 function robot(r){const c=M.colors[r.color],bob=playing?Math.sin(state.time*12+r.color)*1.2:0;ctx.save();ctx.translate(r.x,r.y+bob);ctx.fillStyle='#050b1590';ctx.beginPath();ctx.ellipse(0,15,15,5,0,0,7);ctx.fill();round(-14,5,7,11,3,'#60758d');round(7,5,7,11,3,'#60758d');round(-13,-12,26,25,7,c);round(-9,-7,18,10,4,'#122336');ctx.fillStyle='#eafaff';ctx.fillRect(-6,-4,3,3);ctx.fillRect(3,-4,3,3);ctx.strokeStyle=c;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(0,-12);ctx.lineTo(0,-18);ctx.stroke();ctx.beginPath();ctx.arc(0,-20,3,0,7);ctx.fillStyle=c;ctx.fill();if(r.carrying){round(-6,11,12,12,3,c);ctx.strokeStyle='#ffffffaa';ctx.strokeRect(-4,13,8,8);}ctx.restore();}
-function draw(){ctx.clearRect(0,0,720,660);ctx.fillStyle='#101b2b';ctx.fillRect(0,0,720,660);round(119,24,482,468,18,'#19283b');for(let y=0;y<24;y++)for(let x=0;x<24;x++){ctx.fillStyle='#203147';ctx.beginPath();ctx.arc(142+x*18,47+y*18,1.1,0,7);ctx.fill();}const exterior=M.exposed(state);for(const d of state.dots){if(d.state===3)continue;if(d.state===2){round(d.x-5,d.y-5,10,10,3,'#27374b');continue;}ctx.globalAlpha=exterior.has(d)?1:.28;ctx.fillStyle=M.colors[d.color];ctx.beginPath();ctx.arc(d.x,d.y,6.5,0,7);ctx.fill();ctx.fillStyle='#ffffff45';ctx.beginPath();ctx.arc(d.x-1.5,d.y-2,2,0,7);ctx.fill();ctx.globalAlpha=1;}ctx.setLineDash([4,7]);ctx.strokeStyle='#31435c';ctx.beginPath();ctx.moveTo(38,523);ctx.lineTo(682,523);ctx.stroke();ctx.setLineDash([]);ctx.font='bold 10px system-ui';ctx.textAlign='center';for(const r of state.robots){round(r.homeX-25,566,50,53,12,'#25344b');ctx.fillStyle=M.colors[r.color];ctx.globalAlpha=.45;ctx.fillRect(r.homeX-15,610,30,3);ctx.globalAlpha=1;robot(r);ctx.fillStyle='#94a9c4';ctx.fillText(r.active?'ON DUTY':'PARKED',r.homeX,640);}}
+function draw(){ctx.clearRect(0,0,720,660);ctx.fillStyle='#101b2b';ctx.fillRect(0,0,720,660);round(119,24,482,468,18,'#19283b');for(let y=0;y<24;y++)for(let x=0;x<24;x++){ctx.fillStyle='#203147';ctx.beginPath();ctx.arc(142+x*18,47+y*18,1.1,0,7);ctx.fill();}for(const d of state.dots){if(d.state===3)continue;if(d.state===2){round(d.x-5,d.y-5,10,10,3,'#27374b');continue;}ctx.fillStyle=M.colors[d.color];ctx.beginPath();ctx.arc(d.x,d.y,6.5,0,7);ctx.fill();ctx.fillStyle='#ffffff45';ctx.beginPath();ctx.arc(d.x-1.5,d.y-2,2,0,7);ctx.fill();ctx.globalAlpha=1;}ctx.setLineDash([4,7]);ctx.strokeStyle='#31435c';ctx.beginPath();ctx.moveTo(38,523);ctx.lineTo(682,523);ctx.stroke();ctx.setLineDash([]);ctx.font='bold 10px system-ui';ctx.textAlign='center';for(const r of state.robots){round(r.homeX-25,566,50,53,12,'#25344b');ctx.fillStyle=M.colors[r.color];ctx.globalAlpha=.45;ctx.fillRect(r.homeX-15,610,30,3);ctx.globalAlpha=1;robot(r);ctx.fillStyle='#94a9c4';ctx.fillText(r.active?'ON DUTY':'PARKED',r.homeX,640);}}
 function complete(){announced=true;playing=false;$('play').textContent='Collected ✓';const id=M.levels[state.index].id;if(!saved.completed.includes(id))saved.completed.push(id);save();menus();$('winText').textContent=`${M.levels[state.index].name} is all packed up. ${state.dots.length} pixels delivered by your little robot crew.${state.index===M.levels.length-1?' You finished all five missions!':''}`;$('next').textContent=state.index===M.levels.length-1?'Play from the beginning':'Next mission';$('win').showModal();}
 $('levels').addEventListener('click',e=>{const b=e.target.closest('[data-level]');if(b)load(Number(b.dataset.level));});$('fleet').addEventListener('click',e=>{const b=e.target.closest('button[data-color]');if(!b||b.disabled)return;if(M.deploy(state,Number(b.dataset.color)))hud();});$('play').onclick=()=>{if(state.done)return;playing=!playing;$('play').textContent=playing?'Pause':'Resume';};$('speed').onclick=()=>{speed=speed===1?2:speed===2?4:1;$('speed').textContent=`Speed: ${speed}×`;};$('undo').onclick=()=>{if(M.undo(state)){playing=false;announced=false;$('play').textContent='Resume';hud();draw();}};$('restart').onclick=()=>load(state.index);$('next').onclick=()=>load((state.index+1)%M.levels.length);$('stay').onclick=()=>$('win').close();document.addEventListener('visibilitychange',()=>{last=0;});function frame(t){const dt=last?Math.min((t-last)/1000,.05):0;last=t;if(playing&&!document.hidden){M.step(state,dt*speed);hud();if(state.done&&!announced)complete();}draw();requestAnimationFrame(frame);}load(Math.max(0,M.levels.findIndex(l=>l.id===saved.level)));if(!storage)$('message').textContent='Saving is unavailable here; all five levels are still playable.';requestAnimationFrame(frame);
 })();
