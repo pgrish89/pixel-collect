@@ -11,6 +11,7 @@ for(let i=0;i<5;i++){
 }
 for(const m of html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g))new vm.Script(m[1]);console.log('All five helper schedules win; exact quotas and scripts verified.');
 // Keep the existing Pages entry point responsible for puzzle acceptance too.
+require('./movement-test.cjs');
 require('./puzzle-test.cjs');
 require('./nontrivial-test.cjs');
 require('./neutral-ui-test.cjs');

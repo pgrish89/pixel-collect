@@ -43,12 +43,23 @@ function exposed(s){
  for(let i=0;i<queue.length;i++){const [x,y]=queue[i];for(const [a,b] of [[x-1,y],[x+1,y],[x,y-1],[x,y+1]]){if(a< -1||a>24||b< -1||b>24)continue;const k=`${a},${b}`,d=occupied.get(k);if(d){out.add(d);continue;}if(!seen.has(k)){seen.add(k);queue.push([a,b]);}}}
  s.exterior=out;s.exteriorVersion=s.version;return out;
 }
+// Four-neighbor routes share exposure's occupancy; no corner-cutting.
+function routeTo(s,r,target){
+ const occupied=new Set(s.dots.filter(d=>d.state<2).map(d=>`${(d.x-142)/18},${(d.y-47)/18}`));
+ const start=[Math.max(-1,Math.min(24,Math.round((r.homeX-142)/18))),24],key=(x,y)=>`${x},${y}`;
+ const queue=[start],parents=new Map([[key(...start),null]]),tx=(target.x-142)/18,ty=(target.y-47)/18;let end=null;
+ for(let i=0;i<queue.length;i++){const [x,y]=queue[i];if(Math.abs(x-tx)+Math.abs(y-ty)===1){end=[x,y];break;}
+  for(const [a,b] of [[x-1,y],[x+1,y],[x,y-1],[x,y+1]]){const k=key(a,b);if(a< -1||a>24||b< -1||b>24||occupied.has(k)||parents.has(k))continue;parents.set(k,[x,y]);queue.push([a,b]);}}
+ if(!end)return null;
+ const path=[];for(let cell=end;cell;cell=parents.get(key(...cell)))path.push({x:142+cell[0]*18,y:47+cell[1]*18});path.reverse();
+ return [{x:r.homeX,y:r.homeY},{x:path[0].x,y:r.homeY},...path];
+}
 function nearest(s,r){let best=null,dist=Infinity;for(const d of exposed(s))if(d.color===r.color&&d.state===0){const v=(d.x-r.x)**2+(d.y-r.y)**2;if(v<dist){best=d;dist=v;}}return best;}
 // Test/reference plan only: after each explicit deployment, wait for settled(),
 // not for that robot to leave. A partial job can need a later helper color.
 function solution(i){return authored[levels[i].kind].plan.map(([color,quota])=>({color,quota}));}
-function create(i){const plan=solution(i);return {index:i,dots:makeDots(i),robots:colors.map((c,j)=>({color:j,x:75+j*114,y:585,homeX:75+j*114,homeY:585,target:null,carrying:null,active:false,slot:null,quota:0,delivered:0})),jobs:colors.map((_,c)=>plan.filter(j=>j.color===c).map(j=>j.quota)),used:colors.map(()=>0),history:[],version:0,delivered:0,done:false,time:0};}
-function snapshot(s){return {index:s.index,dots:s.dots.map(d=>({...d})),robots:s.robots.map(r=>({...r,target:r.target?s.dots.indexOf(r.target):null,carrying:r.carrying?s.dots.indexOf(r.carrying):null})),jobs:s.jobs.map(j=>j.slice()),used:s.used.slice(),version:s.version,delivered:s.delivered,done:s.done,time:s.time};}
+function create(i){const plan=solution(i);return {index:i,dots:makeDots(i),robots:colors.map((c,j)=>({color:j,x:75+j*114,y:585,homeX:75+j*114,homeY:585,target:null,carrying:null,active:false,slot:null,quota:0,delivered:0,route:[],returnRoute:[],grab:0})),jobs:colors.map((_,c)=>plan.filter(j=>j.color===c).map(j=>j.quota)),used:colors.map(()=>0),history:[],version:0,delivered:0,done:false,time:0};}
+function snapshot(s){return {index:s.index,dots:s.dots.map(d=>({...d})),robots:s.robots.map(r=>({...r,route:r.route.map(p=>({...p})),returnRoute:r.returnRoute.map(p=>({...p})),target:r.target?s.dots.indexOf(r.target):null,carrying:r.carrying?s.dots.indexOf(r.carrying):null})),jobs:s.jobs.map(j=>j.slice()),used:s.used.slice(),version:s.version,delivered:s.delivered,done:s.done,time:s.time};}
 function deploy(s,color){
  const r=s.robots[color];if(!r||r.active||s.done||s.used[color]>=s.jobs[color].length)return false;
  const slots=s.robots.filter(r=>r.active).map(r=>r.slot);if(slots.length>=3)return false;
@@ -57,10 +68,16 @@ function deploy(s,color){
 function undo(s){if(!s.history.length)return false;const history=s.history,prev=history.pop();Object.assign(s,prev);s.history=history;for(const r of s.robots){r.target=r.target===null?null:s.dots[r.target];r.carrying=r.carrying===null?null:s.dots[r.carrying];}delete s.exterior;delete s.exteriorVersion;return true;}
 function settled(s){return s.done||!s.robots.some(r=>r.active&&(r.target||r.carrying||nearest(s,r)));}
 function blocked(s){return !s.done&&s.robots.some(r=>r.active)&&settled(s);}
-function step(s,dt){if(s.done)return;s.time+=dt;for(const r of s.robots){if(!r.active)continue;
- if(!r.target&&!r.carrying){const best=nearest(s,r);if(best){best.state=1;r.target=best;}}
- const dest=r.target||{x:r.homeX,y:r.homeY};const dx=dest.x-r.x,dy=dest.y-r.y,d=Math.hypot(dx,dy),move=dt*420;
- if(d<=move){r.x=dest.x;r.y=dest.y;if(r.target){r.carrying=r.target;r.target=null;r.carrying.state=3;s.version++;}else if(r.carrying){r.carrying.state=2;r.carrying=null;s.delivered++;r.delivered++;if(r.delivered===r.quota){r.active=false;r.slot=null;}}}else{r.x+=dx/d*move;r.y+=dy/d*move;}}
+function step(s,dt){
+ // Bounded substeps also apply at 4× speed; no wall-clock animation timers.
+ dt=Math.max(0,Number.isFinite(dt)?dt:0);while(dt>0){const tick=Math.min(dt,.05);advance(s,tick);dt-=tick;}
+}
+function advance(s,dt){if(s.done)return;s.time+=dt;for(const r of s.robots){if(!r.active)continue;
+ if(!r.target&&!r.carrying){const best=nearest(s,r);if(best){const path=routeTo(s,r,best);if(path){best.state=1;r.target=best;r.route=path.slice(1);r.returnRoute=path.slice(0,-1).reverse();}}}
+ if(r.grab>0){r.grab=Math.max(0,r.grab-dt);if(!r.grab){r.carrying=r.target;r.target=null;r.carrying.state=3;s.version++;r.route=r.returnRoute;r.returnRoute=[];}continue;}
+ let budget=dt*420;
+ while(r.route.length){const dest=r.route[0],dx=dest.x-r.x,dy=dest.y-r.y,d=Math.hypot(dx,dy);if(d>budget){r.x+=dx/d*budget;r.y+=dy/d*budget;break;}r.x=dest.x;r.y=dest.y;budget-=d;r.route.shift();}
+ if(!r.route.length){if(r.target){r.grab=.18;}else if(r.carrying){r.carrying.state=2;r.carrying=null;s.delivered++;r.delivered++;if(r.delivered===r.quota){r.active=false;r.slot=null;}}}}
  s.done=s.delivered===s.dots.length;
 }
 return {colors,levels,makeDots,pictureDots,create,step,deploy,undo,exposed,blocked,settled,solution};})();
@@ -120,7 +137,12 @@ function jobsHUD(){
 function load(i){if($('win').open)$('win').close();state=M.create(i);saved.level=M.levels[i].id;save();playing=false;announced=false;$('play').textContent='Start collecting';$('title').textContent=`${i+1}. ${M.levels[i].name}`;$('subtitle').textContent=M.levels[i].note;menus();draw();hud();}
 function hud(){jobsHUD();const p=Math.round(state.delivered/state.dots.length*100);$('count').textContent=`${p}% · ${state.delivered}/${state.dots.length}`;$('bar').style.width=p+'%';document.querySelector('.progress').setAttribute('aria-valuenow',p);}
 function round(x,y,w,h,r,c){ctx.fillStyle=c;ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fill();}
-function robot(r){const c=M.colors[r.color],bob=playing?Math.sin(state.time*12+r.color)*1.2:0;ctx.save();ctx.translate(r.x,r.y+bob);ctx.fillStyle='#050b1590';ctx.beginPath();ctx.ellipse(0,15,15,5,0,0,7);ctx.fill();round(-14,5,7,11,3,'#60758d');round(7,5,7,11,3,'#60758d');round(-13,-12,26,25,7,c);round(-9,-7,18,10,4,'#122336');ctx.fillStyle='#eafaff';ctx.fillRect(-6,-4,3,3);ctx.fillRect(3,-4,3,3);ctx.strokeStyle=c;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(0,-12);ctx.lineTo(0,-18);ctx.stroke();ctx.beginPath();ctx.arc(0,-20,3,0,7);ctx.fillStyle=c;ctx.fill();if(r.carrying){round(-6,11,12,12,3,c);ctx.strokeStyle='#ffffffaa';ctx.strokeRect(-4,13,8,8);}ctx.restore();}
+// Working art (including the carried parcel) stays inside an 8px radius.
+// Parked robots retain their larger dock portrait; only the claw reaches out.
+function workingRobot(r){const c=M.colors[r.color];ctx.save();ctx.translate(r.x,r.y);
+ if(r.grab&&r.target){const dx=r.target.x-r.x,dy=r.target.y-r.y,p=Math.sin(Math.PI*(1-r.grab/.18)),reach=5+7*p;ctx.strokeStyle=c;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(dx/18*4,dy/18*4);ctx.lineTo(dx/18*reach,dy/18*reach);ctx.stroke();ctx.fillStyle='#eafaff';ctx.beginPath();ctx.arc(dx/18*reach,dy/18*reach,1.5,0,7);ctx.fill();}
+ ctx.fillStyle='#050b1590';ctx.beginPath();ctx.ellipse(0,5,6,2,0,0,7);ctx.fill();round(-5,3,3,3,1,'#60758d');round(2,3,3,3,1,'#60758d');round(-5,-4,10,9,3,c);round(-4,-3,8,4,1,'#122336');ctx.fillStyle='#eafaff';ctx.fillRect(-3,-2,2,2);ctx.fillRect(1,-2,2,2);ctx.fillStyle=c;ctx.fillRect(-.5,-6,1,2);ctx.beginPath();ctx.arc(0,-6,1,0,7);ctx.fill();if(r.carrying){round(-3,1,6,5,1,c);ctx.strokeStyle='#ffffffaa';ctx.lineWidth=1;ctx.strokeRect(-2.5,1.5,5,4);}ctx.restore();}
+function robot(r){if(r.active){workingRobot(r);return;}const c=M.colors[r.color],bob=playing?Math.sin(state.time*12+r.color)*1.2:0;ctx.save();ctx.translate(r.x,r.y+bob);ctx.fillStyle='#050b1590';ctx.beginPath();ctx.ellipse(0,15,15,5,0,0,7);ctx.fill();round(-14,5,7,11,3,'#60758d');round(7,5,7,11,3,'#60758d');round(-13,-12,26,25,7,c);round(-9,-7,18,10,4,'#122336');ctx.fillStyle='#eafaff';ctx.fillRect(-6,-4,3,3);ctx.fillRect(3,-4,3,3);ctx.strokeStyle=c;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(0,-12);ctx.lineTo(0,-18);ctx.stroke();ctx.beginPath();ctx.arc(0,-20,3,0,7);ctx.fillStyle=c;ctx.fill();if(r.carrying){round(-6,11,12,12,3,c);ctx.strokeStyle='#ffffffaa';ctx.strokeRect(-4,13,8,8);}ctx.restore();}
 function draw(){ctx.clearRect(0,0,720,660);ctx.fillStyle='#101b2b';ctx.fillRect(0,0,720,660);round(119,24,482,468,18,'#19283b');for(let y=0;y<24;y++)for(let x=0;x<24;x++){ctx.fillStyle='#203147';ctx.beginPath();ctx.arc(142+x*18,47+y*18,1.1,0,7);ctx.fill();}for(const d of state.dots){if(d.state===3)continue;if(d.state===2){round(d.x-5,d.y-5,10,10,3,'#27374b');continue;}ctx.fillStyle=M.colors[d.color];ctx.beginPath();ctx.arc(d.x,d.y,6.5,0,7);ctx.fill();ctx.fillStyle='#ffffff45';ctx.beginPath();ctx.arc(d.x-1.5,d.y-2,2,0,7);ctx.fill();ctx.globalAlpha=1;}ctx.setLineDash([4,7]);ctx.strokeStyle='#31435c';ctx.beginPath();ctx.moveTo(38,523);ctx.lineTo(682,523);ctx.stroke();ctx.setLineDash([]);ctx.font='bold 10px system-ui';ctx.textAlign='center';for(const r of state.robots){round(r.homeX-25,566,50,53,12,'#25344b');ctx.fillStyle=M.colors[r.color];ctx.globalAlpha=.45;ctx.fillRect(r.homeX-15,610,30,3);ctx.globalAlpha=1;robot(r);ctx.fillStyle='#94a9c4';ctx.fillText(r.active?'ON DUTY':'PARKED',r.homeX,640);}}
 function complete(){announced=true;playing=false;$('play').textContent='Collected ✓';const id=M.levels[state.index].id;if(!saved.completed.includes(id))saved.completed.push(id);save();menus();$('winText').textContent=`${M.levels[state.index].name} is all packed up. ${state.dots.length} pixels delivered by your little robot crew.${state.index===M.levels.length-1?' You finished all five missions!':''}`;$('next').textContent=state.index===M.levels.length-1?'Play from the beginning':'Next mission';$('win').showModal();}
 $('levels').addEventListener('click',e=>{const b=e.target.closest('[data-level]');if(b)load(Number(b.dataset.level));});$('fleet').addEventListener('click',e=>{const b=e.target.closest('button[data-color]');if(!b||b.disabled)return;if(M.deploy(state,Number(b.dataset.color)))hud();});$('play').onclick=()=>{if(state.done)return;playing=!playing;$('play').textContent=playing?'Pause':'Resume';};$('speed').onclick=()=>{speed=speed===1?2:speed===2?4:1;$('speed').textContent=`Speed: ${speed}×`;};$('undo').onclick=()=>{if(M.undo(state)){playing=false;announced=false;$('play').textContent='Resume';hud();draw();}};$('restart').onclick=()=>load(state.index);$('next').onclick=()=>load((state.index+1)%M.levels.length);$('stay').onclick=()=>$('win').close();document.addEventListener('visibilitychange',()=>{last=0;});function frame(t){const dt=last?Math.min((t-last)/1000,.05):0;last=t;if(playing&&!document.hidden){M.step(state,dt*speed);hud();if(state.done&&!announced)complete();}draw();requestAnimationFrame(frame);}load(Math.max(0,M.levels.findIndex(l=>l.id===saved.level)));if(!storage)$('message').textContent='Saving is unavailable here; all five levels are still playable.';requestAnimationFrame(frame);
