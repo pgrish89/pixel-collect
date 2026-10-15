@@ -25,13 +25,21 @@ Do not change Settings → Pages back to branch publishing; the Actions workflow
 
 Open the live URL in Safari, choose Share → Add to Home Screen, and enable Open as Web App if offered. Open the Home Screen app online once before testing offline. The preview has its own manifest and Home Screen identity if installed separately. Closing and reopening after an update lets a waiting service worker activate.
 
+## Puzzle mechanics
+
+Each mission starts paused with three empty active slots. Choose a color to deploy its next fixed-quota job, then press **Start collecting**. Each color button shows its next target and remaining jobs; active or exhausted colors cannot be selected. Up to three jobs may run together. A slot unlocks only when its full target has been **delivered home**, not on pickup; robots cannot be freely parked or swapped.
+
+Robots collect only matching pixels adjacent through four-way empty space to the outside of the picture. Bright pixels are exposed; dim pixels are inside. Sealed holes do not count as outside, and reserving a pixel does not open a passage—picking it up does. Choose colors outside-in to avoid filling all three slots with blocked jobs. Blocked guidance offers **Undo** or **Restart**; there is no automatic deployment or timeout.
+
+**Undo** restores the entire state immediately before the last successful selection, including earlier robots, reservations, carried pixels, deliveries, and job counts, then pauses with **Resume**. **Restart** resets the current puzzle to empty slots without clearing completed-level checkmarks. Speed cycles through 1×, 2×, and 4×. All five missions have verified winning selection sequences. This puzzle feature batch is a candidate for a minor 0.x release; save schema and keys remain unchanged.
+
 ## Saves and compatibility
 
 Completed-level checkmarks and the selected level are stored locally. Mid-level pixel collection is not saved yet. Each level has a permanent ID; changing its title or display position must not change its ID. Adding a level must not renumber existing IDs. Save schema changes need explicit migrations, not an automatic reset.
 
 The hosted live game migrates the original `pixel-collect-v1` index-based save to stable level IDs without deleting the original. Production and preview use separate localStorage keys even though they share a website origin. Preview never imports production progress automatically. Service-worker caches are also scoped independently. Preview saves persist across preview branch switches, so test branches must maintain save compatibility too.
 
-Progress is not synced across devices/browser contexts; downloaded HTML has a separate save from the website. Use the Home Screen app consistently after installing. Clearing website data or removing the app may erase saves. Avoid private browsing for persistent saves. There are no reset buttons yet; replay/reset/export controls are future features, not implemented here.
+Progress is not synced across devices/browser contexts; downloaded HTML has a separate save from the website. Use the Home Screen app consistently after installing. Clearing website data or removing the app may erase saves. Avoid private browsing for persistent saves. Restart replays only the current puzzle; it does not erase saved checkmarks. Saved-progress reset/export/import controls are not implemented.
 
 ## Files and tests
 
@@ -39,6 +47,7 @@ Progress is not synced across devices/browser contexts; downloaded HTML has a se
 - `docs/`: generated hosted HTML, manifest, PNG icons, and maintained network-first offline service worker.
 - `prepare-site.py`: regenerate hosted HTML/icons (requires Pillow); does not change the save key on every release.
 - `test.cjs`: simulate completion of all five levels and validate script syntax.
+- `puzzle-test.cjs`: slot limits, exact concurrent quotas, outside/cavity exposure, blocked states, and full-snapshot Undo regressions.
 - `save-test.cjs`: save migration, stable-ID and isolation regression tests.
 - `deployment-test.py`: site assembly and provenance tests.
 - `browser-test.cjs`, `live-test.cjs`: browser gameplay and production/offline regression checks.
